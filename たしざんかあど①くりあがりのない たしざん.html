@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>たしざんかあど①くりあがりのない たしざん</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            background-color: #FFF0F5; /* ピンク系の背景 */
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            overflow: hidden;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .shake { animation: shake 0.3s ease-in-out; }
+        .dots-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px;
+            width: fit-content;
+        }
+        /* スクロールバーのデザイン */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #fbcfe8; /* ピンク系 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #f472b6; 
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^18.2.0/",
+    "react/": "https://esm.sh/react@^18.2.0/",
+    "react": "https://esm.sh/react@^18.2.0"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback, useRef } = React;
+
+        // --- Types & Constants ---
+        const GameMode = {
+            SEQUENTIAL_ASC: 'SEQUENTIAL_ASC',
+            SEQUENTIAL_DESC: 'SEQUENTIAL_DESC',
+            RANDOM_10: 'RANDOM_10',
+            RANDOM_20: 'RANDOM_20'
+        };
+
+        // --- Audio Service ---
+        const audioService = {
+            ctx: null,
+            init() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            },
+            playCorrect() {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1046.50, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            },
+            playWrong() {
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        };
+
+        // --- Math Utils (くりあがりのない たしざん) ---
+        const generateAdditionPool = () => {
+            const pool = [];
+            // 0から10までの数を使う
+            for (let a = 0; a <= 10; a++) {
+                for (let b = 0; b <= 10; b++) {
+                    // 答えが10以下になるものを抽出
+                    if (a + b <= 10) {
+                        pool.push({ val1: a, val2: b, answer: a + b });
+                    }
+                }
+            }
+            return pool;
+        };
+
+        const shuffleArray = (array) => {
+            const newArr = [...array];
+            for (let i = newArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+            }
+            return newArr;
+        };
+
+        // --- Components ---
+
+        const Home = ({ onStart, onShowHistory, soundEnabled, toggleSound, dotsEnabled, toggleDots, historyCount }) => (
+            <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+                <div className="bg-white p-6 rounded-[40px] shadow-xl max-w-sm w-full border-4 border-pink-200">
+                    <h1 className="text-3xl font-extrabold text-pink-500 mb-1">たしざんかあど①</h1>
+                    <h2 className="text-xl font-bold text-orange-400 mb-6">くりあがりのない たしざん</h2>
+                    
+                    <div className="space-y-3 w-full">
+                        <button onClick={() => onStart(GameMode.SEQUENTIAL_ASC)} className="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3.5 rounded-2xl shadow-md transition active:scale-95 text-lg">
+                            じゅんばん (0+0はじまり)
+                        </button>
+                        <button onClick={() => onStart(GameMode.SEQUENTIAL_DESC)} className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3.5 rounded-2xl shadow-md transition active:scale-95 text-lg">
+                            ぎゃくじゅん (10+0はじまり)
+                        </button>
+                        <button onClick={() => onStart(GameMode.RANDOM_10)} className="w-full bg-orange-400 hover:bg-orange-500 text-white font-bold py-3.5 rounded-2xl shadow-md transition active:scale-95 text-lg">
+                            ランダム 10問
+                        </button>
+                        <button onClick={() => onStart(GameMode.RANDOM_20)} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-2xl shadow-md transition active:scale-95 text-lg">
+                            ランダム 20問
+                        </button>
+                    </div>
+
+                    <div className="mt-6 flex flex-col space-y-3">
+                        <div className="flex items-center justify-between px-4">
+                            <span className="text-gray-500 font-bold text-sm">サウンド</span>
+                            <button onClick={toggleSound} className={`w-28 py-1.5 rounded-full font-bold text-sm transition ${soundEnabled ? 'bg-pink-500 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                {soundEnabled ? 'ON 🔊' : 'OFF 🔈'}
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-between px-4">
+                            <span className="text-gray-500 font-bold text-sm">ヒント</span>
+                            <button onClick={toggleDots} className={`w-28 py-1.5 rounded-full font-bold text-sm transition ${dotsEnabled ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                                {dotsEnabled ? 'あり ●' : 'なし ○'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-gray-100">
+                        <button onClick={onShowHistory} className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-xl transition group">
+                            <div className="text-left">
+                                <div className="text-xs text-gray-400 font-bold">これまでのきろく</div>
+                                <div className="text-sm font-bold text-gray-600">{historyCount}件 保存済み</div>
+                            </div>
+                            <span className="text-pink-400 font-bold text-sm group-hover:translate-x-1 transition">みる →</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const HistoryPage = ({ history, onBack, onDeleteItem, onClearAll }) => {
+            const [confirmClear, setConfirmClear] = useState(false);
+
+            const formatDate = (isoString) => {
+                const d = new Date(isoString);
+                return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+            };
+
+            const calculateAccuracy = (total, wrongClicks, wrongProblems) => {
+                const mistakeCount = wrongProblems ? wrongProblems.length : wrongClicks;
+                const score = total - mistakeCount;
+                const acc = Math.round((score / total) * 100);
+                return Math.max(0, acc);
+            };
+
+            const getStamp = (correct, total, wrongClicks, wrongProblems) => {
+                const acc = calculateAccuracy(total, wrongClicks, wrongProblems);
+                if (acc === 100) return '💮';
+                if (acc >= 80) return '🎉';
+                return '👍';
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-pink-50">
+                    <div className="p-4 bg-white shadow-sm flex items-center justify-between z-10">
+                        <button onClick={onBack} className="text-pink-500 font-bold px-3 py-1 hover:bg-pink-50 rounded-lg transition text-sm">← もどる</button>
+                        <h2 className="text-lg font-black text-gray-700">きろく</h2>
+                        <div className="w-16"></div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {history.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
+                                <div className="text-4xl">📭</div>
+                                <p className="font-bold">まだ きろくが ありません</p>
+                            </div>
+                        ) : (
+                            <div className="max-w-md mx-auto space-y-2 pb-20">
+                                <div className="grid grid-cols-12 gap-2 px-4 text-xs font-bold text-gray-400 mb-1">
+                                    <div className="col-span-2 text-center">スタンプ</div>
+                                    <div className="col-span-4">日時</div>
+                                    <div className="col-span-2 text-center">正答率</div>
+                                    <div className="col-span-2 text-center">タイム</div>
+                                    <div className="col-span-2 text-center">ヒント</div>
+                                </div>
+                                
+                                {history.map((item, index) => {
+                                    const acc = calculateAccuracy(item.total, item.wrong, item.wrongProblems);
+                                    return (
+                                        <div key={index} className="bg-white rounded-xl shadow-sm border border-slate-100 relative overflow-hidden group flex flex-col">
+                                            <div className="grid grid-cols-12 gap-2 p-3 items-center">
+                                                <div className="col-span-2 flex justify-center text-2xl">
+                                                    {getStamp(item.correct, item.total, item.wrong, item.wrongProblems)}
+                                                </div>
+                                                <div className="col-span-4 flex flex-col justify-center">
+                                                    <div className="text-sm font-bold text-gray-700">{formatDate(item.date).split(' ')[0]}</div>
+                                                    <div className="text-xs text-gray-400">{formatDate(item.date).split(' ')[1]}</div>
+                                                </div>
+                                                <div className="col-span-2 flex justify-center items-center">
+                                                    <div className={`font-black text-lg ${acc >= 80 ? 'text-orange-500' : 'text-pink-500'}`}>
+                                                        {acc}<span className="text-[10px]">%</span>
+                                                    </div>
+                                                </div>
+                                                <div className="col-span-2 flex justify-center text-xs font-bold text-gray-500">
+                                                    {Math.floor(item.timeMs / 1000)}秒
+                                                </div>
+                                                <div className="col-span-2 flex justify-center">
+                                                    <span className={`text-sm ${item.dotsEnabled ? 'text-orange-400' : 'text-gray-300'}`}>
+                                                        {item.dotsEnabled ? '●' : '○'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {item.wrongProblems && item.wrongProblems.length > 0 && (
+                                                <div className="px-3 pb-3 pt-0 border-t border-gray-50 mt-[-4px]">
+                                                    <div className="text-[10px] text-gray-400 font-bold mb-1 mt-2">まちがえた問題:</div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {item.wrongProblems.map((p, i) => (
+                                                            <span key={i} className="text-xs font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                                                                {p.val1}+{p.val2}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); onDeleteItem(index); }}
+                                                className="absolute top-0 right-0 bottom-0 w-8 bg-red-50 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition hover:bg-red-100 font-bold z-10"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    {history.length > 0 && (
+                        <div className="p-4 bg-white border-t border-gray-100 text-center">
+                            {!confirmClear ? (
+                                <button onClick={() => setConfirmClear(true)} className="text-red-400 text-sm font-bold hover:text-red-600 transition">
+                                    🗑️ すべてのきろくを消す
+                                </button>
+                            ) : (
+                                <div className="flex items-center justify-center gap-4">
+                                    <span className="text-sm font-bold text-gray-600">本当に消しますか？</span>
+                                    <button onClick={onClearAll} className="bg-red-500 text-white px-4 py-1.5 rounded-full text-xs font-bold hover:bg-red-600">はい</button>
+                                    <button onClick={() => setConfirmClear(false)} className="bg-gray-200 text-gray-600 px-4 py-1.5 rounded-full text-xs font-bold hover:bg-gray-300">いいえ</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const Game = ({ problems, soundEnabled, dotsEnabled, onFinish, onBack }) => {
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [correctCount, setCorrectCount] = useState(0);
+            const [wrongCount, setWrongCount] = useState(0);
+            const [feedback, setFeedback] = useState(null);
+            const [isAnimating, setIsAnimating] = useState(false);
+            const [missedIndices, setMissedIndices] = useState(new Set());
+            const startTimeRef = useRef(Date.now());
+
+            const currentProblem = problems[currentIndex];
+
+            const handleAnswer = useCallback((val) => {
+                if (isAnimating || feedback === 'correct') return;
+
+                if (val === currentProblem.answer) {
+                    if (soundEnabled) audioService.playCorrect();
+                    setFeedback('correct');
+                    const nextCorrect = correctCount + 1;
+                    setCorrectCount(nextCorrect);
+                    setIsAnimating(true);
+                    
+                    setTimeout(() => {
+                        if (currentIndex + 1 < problems.length) {
+                            setCurrentIndex(prev => prev + 1);
+                            setFeedback(null);
+                            setIsAnimating(false);
+                        } else {
+                            onFinish(nextCorrect, wrongCount, Date.now() - startTimeRef.current, Array.from(missedIndices).map(idx => problems[idx]));
+                        }
+                    }, 600);
+                } else {
+                    if (soundEnabled) audioService.playWrong();
+                    setFeedback('wrong');
+                    setWrongCount(prev => prev + 1);
+                    setMissedIndices(prev => new Set(prev).add(currentIndex));
+                    setTimeout(() => setFeedback(null), 500);
+                }
+            }, [currentIndex, currentProblem, problems, soundEnabled, correctCount, wrongCount, isAnimating, feedback, missedIndices, onFinish]);
+
+            const renderDots = (num, colorClass) => {
+                if (!dotsEnabled) return null;
+                
+                const containerClass = "flex flex-col items-center justify-end min-h-[5rem] mb-2";
+                
+                return (
+                    <div className={containerClass}>
+                        <div className="dots-grid">
+                            {[...Array(20)].map((_, i) => (
+                                <span key={i} className={`text-sm leading-none ${i < num ? colorClass : 'text-transparent'}`}>●</span>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-pink-50">
+                    <div className="p-3 flex justify-between items-center bg-white shadow-sm">
+                        <button onClick={onBack} className="text-pink-500 font-bold px-3 py-1 hover:bg-pink-50 rounded-lg transition text-sm">← もどる</button>
+                        <div className="text-sm font-bold text-pink-500">{currentIndex + 1} / {problems.length}</div>
+                        <div className="text-sm font-bold flex gap-3">
+                            <span className="text-green-500">〇 {correctCount}</span>
+                            <span className="text-red-500">× {wrongCount}</span>
+                        </div>
+                    </div>
+                    <div className="w-full h-1 bg-gray-100">
+                        <div className="h-full bg-pink-400 transition-all duration-300" style={{ width: `${((currentIndex + 1) / problems.length) * 100}%` }} />
+                    </div>
+                    <div className="flex-1 flex items-center justify-center p-4 relative">
+                        <div className={`bg-white w-full max-w-sm aspect-[4/3] rounded-[32px] shadow-xl border-4 flex flex-col items-center justify-center relative transition-all duration-300 ${feedback === 'correct' ? 'border-green-400 scale-105' : feedback === 'wrong' ? 'border-red-400 shake' : 'border-pink-100'}`}>
+                            
+                            <div className="flex items-end justify-center gap-2 md:gap-4 pb-4">
+                                <div className="flex flex-col items-center">
+                                    {renderDots(currentProblem.val1, 'text-orange-400')}
+                                    <div className="text-6xl md:text-8xl font-black text-gray-800 leading-none">{currentProblem.val1}</div>
+                                </div>
+                                
+                                <div className="flex flex-col items-center justify-end pb-2 md:pb-4">
+                                    <div className="text-4xl md:text-6xl font-black text-pink-400 px-2">+</div>
+                                </div>
+                                
+                                <div className="flex flex-col items-center">
+                                    {renderDots(currentProblem.val2, 'text-pink-400')}
+                                    <div className="text-6xl md:text-8xl font-black text-gray-800 leading-none">{currentProblem.val2}</div>
+                                </div>
+                            </div>
+
+                            {feedback && <div className={`absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 text-[12rem] ${feedback === 'correct' ? 'text-green-400' : 'text-red-400'}`}>{feedback === 'correct' ? '〇' : '×'}</div>}
+                        </div>
+                    </div>
+                    <div className="p-4 pb-8 bg-white rounded-t-[32px] shadow-lg">
+                        {/* くりあがりのない足し算用ボタン (0〜5 / 6〜10) - Flexで中央揃えかつサイズ統一 */}
+                        <div className="max-w-sm mx-auto space-y-2">
+                            {/* 1段目: 0 1 2 3 4 5 (6個) */}
+                            <div className="flex justify-center gap-1">
+                                {[0, 1, 2, 3, 4, 5].map(num => (
+                                    <button key={num} onClick={() => handleAnswer(num)} disabled={isAnimating} className="w-[15.5%] aspect-[1/1.2] flex items-center justify-center text-xl md:text-2xl font-bold rounded-xl shadow-sm bg-orange-50 text-orange-600 active:scale-90 transition border border-orange-100">
+                                        {num}
+                                    </button>
+                                ))}
+                            </div>
+                            {/* 2段目: 6 7 8 9 10 (5個) - 中央揃え、サイズは1段目と同じ */}
+                            <div className="flex justify-center gap-1">
+                                {[6, 7, 8, 9, 10].map(num => (
+                                    <button key={num} onClick={() => handleAnswer(num)} disabled={isAnimating} className="w-[15.5%] aspect-[1/1.2] flex items-center justify-center text-xl md:text-2xl font-bold rounded-xl shadow-sm bg-orange-50 text-orange-600 active:scale-90 transition border border-orange-100">
+                                        {num}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Result = ({ correct, wrong, total, timeMs, dotsEnabled, wrongProblems, mode, onRestart, onShowHistory }) => {
+            const uniqueWrongCount = wrongProblems.length;
+            const finalScore = total - uniqueWrongCount;
+            const accuracy = Math.round((finalScore / total) * 100);
+            const timeStr = `${Math.floor(timeMs / 60000) > 0 ? Math.floor(timeMs / 60000) + '分' : ''}${Math.floor((timeMs % 60000) / 1000)}秒`;
+
+            return (
+                <div className="flex flex-col items-center justify-start min-h-screen bg-pink-50 p-4 overflow-y-auto">
+                    <div className="bg-white p-6 rounded-[32px] shadow-xl max-w-sm w-full border-4 border-yellow-300 relative my-4">
+                        <h2 className="text-xl font-black text-gray-700 mb-4 text-center">けっか</h2>
+                        <div className="flex flex-col items-center mb-4">
+                            <div className="text-6xl mb-1 animate-bounce">{accuracy === 100 ? '💮' : accuracy >= 80 ? '🎉' : '👍'}</div>
+                            <p className="text-lg font-black text-orange-500">{accuracy === 100 ? 'たいへんよくできました！' : 'がんばったね！'}</p>
+                        </div>
+                        <div className="space-y-2 mb-6 bg-gray-50 p-4 rounded-2xl text-sm font-bold">
+                            <div className="flex justify-between border-b pb-1"><span>タイム</span><span className="text-pink-600">{timeStr}</span></div>
+                            <div className="flex justify-between border-b pb-1 pt-1"><span>正解スコア</span><span className="text-xl text-orange-500">{finalScore} / {total}</span></div>
+                            <div className="flex justify-between text-xs text-gray-400"><span>まちがい(クリック数): {wrong}回</span><span>正答率: {accuracy}%</span></div>
+                        </div>
+                        {wrongProblems.length > 0 && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-gray-400 mb-2 border-b">📝 まちがえた もんだい</h3>
+                                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                                    {wrongProblems.map((p, i) => <div key={i} className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-xs font-bold">{p.val1}+{p.val2}</div>)}
+                                </div>
+                            </div>
+                        )}
+                        <div className="space-y-3">
+                            <button onClick={onShowHistory} className="w-full bg-orange-100 text-orange-600 py-3 rounded-2xl font-bold hover:bg-orange-200 transition">
+                                📋 きろくをみる
+                            </button>
+                            <button onClick={onRestart} className="w-full bg-pink-500 text-white py-4 rounded-2xl shadow-md text-xl font-black active:scale-95 transition">
+                                メニューにもどる
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main App ---
+        const App = () => {
+            const [screen, setScreen] = useState('HOME');
+            const [mode, setMode] = useState('');
+            const [problems, setProblems] = useState([]);
+            const [soundEnabled, setSoundEnabled] = useState(true);
+            const [dotsEnabled, setDotsEnabled] = useState(true);
+            const [history, setHistory] = useState([]);
+            const [lastResult, setLastResult] = useState(null);
+
+            // 保存キーを変更して履歴を分ける
+            const STORAGE_KEY = 'math_history_add_simple';
+
+            useEffect(() => {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) setHistory(JSON.parse(saved));
+            }, []);
+
+            const updateHistory = (newHistory) => {
+                setHistory(newHistory);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+            };
+
+            const startGame = (selectedMode) => {
+                const pool = generateAdditionPool();
+                let selected = [];
+                let modeLabel = '';
+                
+                if (selectedMode === GameMode.SEQUENTIAL_ASC) {
+                    // 0+0 から 10+0 へ
+                    selected = [...pool].sort((a,b) => a.answer !== b.answer ? a.answer - b.answer : a.val1 - b.val1);
+                    modeLabel = 'じゅんばん';
+                } else if (selectedMode === GameMode.SEQUENTIAL_DESC) {
+                    // 10+0 から 0+0 へ
+                    selected = [...pool].sort((a,b) => a.answer !== b.answer ? b.answer - a.answer : b.val1 - a.val1);
+                    modeLabel = 'ぎゃくじゅん';
+                } else {
+                    selected = shuffleArray(pool).slice(0, selectedMode === GameMode.RANDOM_10 ? 10 : 20);
+                    modeLabel = selectedMode === GameMode.RANDOM_10 ? 'ランダム10' : 'ランダム20';
+                }
+                
+                setMode(modeLabel);
+                setProblems(selected);
+                setScreen('GAME');
+            };
+
+            const finishGame = (correct, wrong, timeMs, wrongProblems) => {
+                const result = { correct, wrong, total: problems.length, timeMs, mode, dotsEnabled, wrongProblems, date: new Date().toISOString() };
+                const newHistory = [result, ...history].slice(0, 100);
+                updateHistory(newHistory);
+                setLastResult(result);
+                setScreen('RESULT');
+            };
+
+            const handleDeleteItem = (index) => {
+                const newHistory = history.filter((_, i) => i !== index);
+                updateHistory(newHistory);
+            };
+
+            const handleClearAll = () => {
+                updateHistory([]);
+            };
+
+            return (
+                <div className="h-screen w-screen bg-pink-50 font-sans select-none overflow-hidden text-gray-800">
+                    {screen === 'HOME' && (
+                        <Home 
+                            onStart={startGame} 
+                            onShowHistory={() => setScreen('HISTORY')}
+                            soundEnabled={soundEnabled} 
+                            toggleSound={() => setSoundEnabled(!soundEnabled)} 
+                            dotsEnabled={dotsEnabled} 
+                            toggleDots={() => setDotsEnabled(!dotsEnabled)} 
+                            historyCount={history.length} 
+                        />
+                    )}
+                    {screen === 'GAME' && (
+                        <Game 
+                            problems={problems} 
+                            soundEnabled={soundEnabled} 
+                            dotsEnabled={dotsEnabled} 
+                            onFinish={finishGame} 
+                            onBack={() => setScreen('HOME')} 
+                        />
+                    )}
+                    {screen === 'RESULT' && (
+                        <Result 
+                            {...lastResult} 
+                            onRestart={() => setScreen('HOME')} 
+                            onShowHistory={() => setScreen('HISTORY')}
+                        />
+                    )}
+                    {screen === 'HISTORY' && (
+                        <HistoryPage 
+                            history={history} 
+                            onBack={() => setScreen('HOME')} 
+                            onDeleteItem={handleDeleteItem}
+                            onClearAll={handleClearAll}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
