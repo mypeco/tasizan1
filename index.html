@@ -12,7 +12,6 @@
     <style>
         body {
             font-family: 'M PLUS Rounded 1c', sans-serif;
-            /* 背景を薄いピンクに変更 */
             background-color: #FFF0F5;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -29,21 +28,10 @@
             gap: 4px;
             width: fit-content;
         }
-        /* スクロールバーのデザイン */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 <script type="importmap">
 {
@@ -108,10 +96,8 @@
         // --- Math Utils ---
         const generateAdditionPool = () => {
             const pool = [];
-            // 0+0=0 から 10+0=10 までの繰り上がりのない足し算
             for (let a = 0; a <= 10; a++) {
                 for (let b = 0; b <= 10; b++) {
-                    // 答えが10以下になるもの
                     if (a + b <= 10) {
                         pool.push({ val1: a, val2: b, answer: a + b });
                     }
@@ -133,12 +119,10 @@
 
         const Home = ({ onStart, onShowHistory, soundEnabled, toggleSound, dotsEnabled, toggleDots, historyCount }) => (
             <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
-                {/* 枠線をピンクに変更 */}
                 <div className="bg-white p-6 rounded-[40px] shadow-xl max-w-sm w-full border-4 border-pink-200">
-                    {/* タイトルをピンクに変更 */}
                     <h1 className="text-3xl font-extrabold text-pink-500 mb-1">たしざんかあど①</h1>
                     <h2 className="text-xl font-bold text-orange-400 mb-6">くりあがりのない たしざん</h2>
-                     
+                      
                     <div className="space-y-3 w-full">
                         <button onClick={() => onStart(GameMode.SEQUENTIAL_ASC)} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3.5 rounded-2xl shadow-md transition active:scale-95 text-lg">
                             じゅんばん (0+0はじまり)
@@ -157,7 +141,6 @@
                     <div className="mt-6 flex flex-col space-y-3">
                         <div className="flex items-center justify-between px-4">
                             <span className="text-gray-500 font-bold text-sm">サウンド</span>
-                            {/* ONの色をピンクに変更 */}
                             <button onClick={toggleSound} className={`w-28 py-1.5 rounded-full font-bold text-sm transition ${soundEnabled ? 'bg-pink-400 text-white' : 'bg-gray-200 text-gray-500'}`}>
                                 {soundEnabled ? 'ON 🔊' : 'OFF 🔈'}
                             </button>
@@ -176,7 +159,6 @@
                                 <div className="text-xs text-gray-400 font-bold">これまでのきろく</div>
                                 <div className="text-sm font-bold text-gray-600">{historyCount}件 保存済み</div>
                             </div>
-                            {/* 「みる→」の色をピンクに変更 */}
                             <span className="text-pink-500 font-bold text-sm group-hover:translate-x-1 transition">みる →</span>
                         </button>
                     </div>
@@ -184,6 +166,7 @@
             </div>
         );
 
+        // --- History Page (Modified) ---
         const HistoryPage = ({ history, onBack, onDeleteItem, onClearAll }) => {
             const [confirmClear, setConfirmClear] = useState(false);
 
@@ -195,7 +178,6 @@
             const getStamp = (correct, total, wrong) => {
                 const score = total - wrong;
                 const rate = score / total;
-                
                 if (wrong === 0) return '💮';
                 if (rate >= 0.8) return '🎉';
                 return '👍';
@@ -223,12 +205,13 @@
                             </div>
                         ) : (
                             <div className="max-w-md mx-auto space-y-2 pb-20">
+                                {/* ヘッダーを修正：モード列を追加し、ヒント列を削除(タイムに統合) */}
                                 <div className="grid grid-cols-12 gap-2 px-4 text-xs font-bold text-gray-400 mb-1">
                                     <div className="col-span-2 text-center">スタンプ</div>
-                                    <div className="col-span-4">日時</div>
+                                    <div className="col-span-3 text-center">モード</div>
+                                    <div className="col-span-3">日時</div>
                                     <div className="col-span-2 text-center">正答率</div>
                                     <div className="col-span-2 text-center">タイム</div>
-                                    <div className="col-span-2 text-center">ヒント</div>
                                 </div>
                                  
                                 {history.map((item, index) => {
@@ -236,25 +219,39 @@
                                     return (
                                         <div key={index} className="bg-white rounded-xl shadow-sm border border-slate-100 relative overflow-hidden group flex flex-col">
                                             <div className="grid grid-cols-12 gap-2 p-3 items-center">
+                                                {/* スタンプ (2) */}
                                                 <div className="col-span-2 flex justify-center text-2xl">
                                                     {getStamp(item.correct, item.total, item.wrong)}
                                                 </div>
-                                                <div className="col-span-4 flex flex-col justify-center">
-                                                    <div className="text-sm font-bold text-gray-700">{formatDate(item.date).split(' ')[0]}</div>
-                                                    <div className="text-xs text-gray-400">{formatDate(item.date).split(' ')[1]}</div>
+
+                                                {/* モード (3) - 新規追加 */}
+                                                <div className="col-span-3 flex justify-center">
+                                                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded-md whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
+                                                        {item.mode || '-'}
+                                                    </span>
                                                 </div>
+
+                                                {/* 日時 (3) - 4から3へ変更 */}
+                                                <div className="col-span-3 flex flex-col justify-center">
+                                                    <div className="text-xs font-bold text-gray-700">{formatDate(item.date).split(' ')[0]}</div>
+                                                    <div className="text-[10px] text-gray-400">{formatDate(item.date).split(' ')[1]}</div>
+                                                </div>
+
+                                                {/* 正答率 (2) */}
                                                 <div className="col-span-2 flex justify-center items-center">
                                                     <div className={`font-black text-lg ${acc >= 80 ? 'text-orange-500' : 'text-blue-500'}`}>
                                                         {acc}<span className="text-[10px]">%</span>
                                                     </div>
                                                 </div>
-                                                <div className="col-span-2 flex justify-center text-xs font-bold text-gray-500">
-                                                    {Math.floor(item.timeMs / 1000)}秒
-                                                </div>
-                                                <div className="col-span-2 flex justify-center">
-                                                    <span className={`text-sm ${item.dotsEnabled ? 'text-orange-400' : 'text-gray-300'}`}>
+
+                                                {/* タイム＆ヒント (2) - 統合 */}
+                                                <div className="col-span-2 flex flex-col items-center justify-center">
+                                                    <div className="text-xs font-bold text-gray-500">
+                                                        {Math.floor(item.timeMs / 1000)}秒
+                                                    </div>
+                                                    <div className={`text-[10px] leading-none mt-1 ${item.dotsEnabled ? 'text-orange-400' : 'text-gray-200'}`}>
                                                         {item.dotsEnabled ? '●' : '○'}
-                                                    </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             {item.wrongProblems && item.wrongProblems.length > 0 && (
@@ -375,7 +372,6 @@
                         </div>
                     </div>
                     <div className="w-full h-1 bg-gray-100">
-                        {/* 進捗バーをピンクに変更 */}
                         <div className="h-full bg-pink-400 transition-all duration-300" style={{ width: `${((currentIndex + 1) / problems.length) * 100}%` }} />
                     </div>
                     <div className="flex-1 flex items-center justify-center p-4 relative">
@@ -401,7 +397,6 @@
                         </div>
                     </div>
                     <div className="p-4 pb-8 bg-white rounded-t-[32px] shadow-lg">
-                        {/* 0〜10のボタンレイアウト */}
                         <div className="grid grid-cols-6 gap-2 max-w-sm mx-auto">
                             {[0, 1, 2, 3, 4, 5].map(num => (
                                 <button key={num} onClick={() => handleAnswer(num)} disabled={isAnimating} className="w-full aspect-square flex items-center justify-center text-xl font-bold rounded-xl shadow-sm bg-orange-50 text-orange-600 active:scale-90 transition">
@@ -438,6 +433,7 @@
                             <div className="flex justify-between border-b pb-1"><span>タイム</span><span className="text-blue-600">{timeStr}</span></div>
                             <div className="flex justify-between border-b pb-1 pt-1"><span>正解スコア</span><span className="text-xl text-orange-500">{finalScore} / {total}</span></div>
                             <div className="flex justify-between text-xs text-gray-400"><span>まちがい: {wrong}回</span><span>正答率: {accuracy}%</span></div>
+                            <div className="flex justify-between text-xs text-gray-400 border-t pt-1 mt-1"><span>モード</span><span className="text-blue-500">{mode}</span></div>
                         </div>
                         {wrongProblems.length > 0 && (
                             <div className="mb-6">
@@ -470,7 +466,6 @@
             const [history, setHistory] = useState([]);
             const [lastResult, setLastResult] = useState(null);
 
-            // 保存キーを「たしざん1」用に変更
             const STORAGE_KEY = 'math_addition_no_carry_history_v2';
 
             useEffect(() => {
@@ -489,11 +484,9 @@
                 let modeLabel = '';
                 
                 if (selectedMode === GameMode.SEQUENTIAL_ASC) {
-                    // 足される数(val1)が小さい順、同じなら足す数(val2)が小さい順
                     selected = [...pool].sort((a,b) => a.val1 !== b.val1 ? a.val1 - b.val1 : a.val2 - b.val2);
                     modeLabel = 'じゅんばん';
                 } else if (selectedMode === GameMode.SEQUENTIAL_DESC) {
-                    // 足される数(val1)が大きい順、同じなら足す数(val2)が大きい順
                     selected = [...pool].sort((a,b) => a.val1 !== b.val1 ? b.val1 - a.val1 : b.val2 - a.val2);
                     modeLabel = 'ぎゃくじゅん';
                 } else {
